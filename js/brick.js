@@ -323,32 +323,13 @@ GameLevel.prototype.doCollisions =
             var radian = Math.PI / 3 * percentage
             var velocity = vec2.length(this.ball.velocity)
 
-            var move_vector = collision[2]
-            var move_face = vectorDirection(move_vector, 4)
+            //var move_vector = collision[2]
+            //var move_face = vectorDirection(move_vector, 4)
             
             //var coll_vector = collision[1]
             //var coll_face = vectorDirection(collision[1], 0)
 
-            if (distance <= 0) {
-                this.ball.direction[0] = -1
-
-                if (move_face == Direction.LEFT_DOWN) {
-                    
-                }
-                else {
-                    // *= -1 
-                }
-            }
-            else {
-                this.ball.direction[0] = -1
-                if (move_face == Direction.LEFT_DOWN) {
-                    //
-                }
-                else {
-                    //this.ball.direction[0] *= -1
-                }
-            }
-   
+            this.ball.direction[0] = -1  
 
             this.ball.velocity[0] = velocity * Math.sin(radian)
             this.ball.velocity[1] = velocity * Math.cos(radian)
