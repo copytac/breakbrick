@@ -53,10 +53,25 @@ const GameState = {
 
 const Direction = {
     UP: 0,
-    RIGHT: 1,
+    RIGHT: 1, 
     DOWN: 2,
-    LEFT: 3
+    LEFT: 3,
+    LEFT_UP: 4,
+    LEFT_DOWN: 5,
+    RIGHT_DOWN: 6,
+    RIGHT_UP: 7
 }
+
+const Compass = [
+    vec2.fromValues(0.0, 1.0),
+    vec2.fromValues(1.0, 0.0),
+    vec2.fromValues(0.0, -1.0),
+    vec2.fromValues(-1.0, 0.0),
+    vec2.fromValues(-1.0, 1.0),
+    vec2.fromValues(1.0, 1.0),
+    vec2.fromValues(1.0, -1.0),
+    vec2.fromValues(-1.0, -1.0)
+]
 
 class Game {
     constructor(width, height) {
@@ -91,7 +106,7 @@ class GameLevel {
     }
     init() {}
     initBrick() {}
-    doCollisions() {}
+    doCollisions(oldPosition) {}
     draw() {}
     isCompleted() {}
 }
@@ -111,18 +126,14 @@ class GameObject {
     draw() {}
 }
 
-function vectorDirection(target) {
-    var compass = [
-        vec2.fromValues(0.0, 1.0),
-        vec2.fromValues(1.0, 0.0),
-        vec2.fromValues(0.0, -1.0),
-        vec2.fromValues(-1.0, 0.0)
-    ]
+function vectorDirection(target, compassIndex) {
+
     var max = 0.0
     var best_match = -1
 
-    for (var i = 0; i < 4; ++i) {
-        var dot_product = vec2.dot(vec2.normalize(target, target), compass[i])
+    for (var i = compassIndex; i < compassIndex+4; ++i) {
+        var dot_product = vec2.dot(vec2.normalize(target, target), Compass[i])
+        
         if (dot_product > max) {
             max = dot_product
             best_match = i
@@ -131,27 +142,34 @@ function vectorDirection(target) {
     return best_match
 }
 
-function checkCollision(ball, obj) {
-    var center = vec2.fromValues(ball.position[0] + ball.radius, ball.position[1] + ball.radius)
+const clamp = (min, max, n) => Math.max(min, Math.min(max, n))
+
+function checkCollision(ball, obj, oldPosition) {
+    var center = vec2.fromValues(ball.position[0] + ball.size[0]/2, ball.position[1] + ball.size[1]/2)
     var aabb_half_extents = vec2.fromValues(obj.size[0] / 2, obj.size[1] / 2)
     var aabb_center = vec2.create()
     vec2.add(aabb_center, obj.position, aabb_half_extents)
 
-    var difference = vec2.create()
-    vec2.subtract(difference, center, aabb_center)
-    const clamp = (min, max, n) => Math.max(min, Math.min(max, n))
-    var clamped = vec2.fromValues(clamp(-aabb_half_extents[0], aabb_half_extents[0], difference[0]),
-        clamp(-aabb_half_extents[1], aabb_half_extents[1], difference[1]))
+    var distance = vec2.create()
+    vec2.subtract(distance, center, aabb_center)
+
+    var clamped = vec2.fromValues(
+        clamp(-aabb_half_extents[0], aabb_half_extents[0], distance[0]),
+        clamp(-aabb_half_extents[1], aabb_half_extents[1], distance[1]))
+
     var closest = vec2.create()
     vec2.add(closest, aabb_center, clamped)
 
-    vec2.subtract(difference, closest, center)
+    vec2.subtract(distance, closest, center)
 
-    var result = vec2.squaredLength(difference) < ball.radius
-    if (result)
-        return [result, vectorDirection(difference), difference]
+    var result = vec2.length(distance) < ball.radius
+    if (result) {
+        var difference = vec2.create()
+        vec2.subtract(difference, ball.position, oldPosition)
+        return [result, distance, difference]
+    }
     else
-        return [result, Direction.UP, vec2.fromValues(0, 0)]
+        return result
 }
 
 GameObject.prototype.init =
@@ -206,14 +224,14 @@ GameLevel.prototype.init =
 
         this.paddle.velocity = this.levelWidth / 60
 
-        var radius = 0.02 * (this.levelHeight)
+        var size = 0.04 * (this.levelHeight)
         this.ball = new GameObject(textureResources.awesomeface,
-            vec2.fromValues(this.levelWidth / 2 - radius, 0.97 * this.levelHeight - 2 * radius),
-            vec3.fromValues(2 * radius, 2 * radius), vec3.fromValues(1, 1, 1))
+            vec2.fromValues((this.levelWidth - size) / 2 , 0.97 * this.levelHeight - size),
+            vec3.fromValues(size, size), vec3.fromValues(1, 1, 1))
 
         this.ball.velocity = [0, this.levelHeight / 60]
         this.ball.direction = [1, 1]
-        this.ball.radius = radius
+        this.ball.radius = 0.9 * size /2
 
         this.bricks = Array()
         var tileData = Array()
@@ -268,64 +286,75 @@ GameLevel.prototype.initBrick =
     }
 
 GameLevel.prototype.doCollisions =
-    function () {
+    function (oldPosition) {
         this.bricks.forEach(brick => {
             if (!brick.destroyed) {
-                var collision = checkCollision(this.ball, brick)
+                var collision = checkCollision(this.ball, brick, oldPosition)
                 if (collision[0]) {
                     if (!brick.isSolid) {
                         brick.destroyed = true
                     }
-                    var direction = collision[1]
-                    var diff_vector = collision[2]
-                    if (direction == Direction.LEFT || direction == Direction.RIGHT) {
-                        this.ball.direction[0] *= -1
-                        var penetration = this.ball.radius - Math.abs(diff_vector[0])
-                        if (direction == Direction.LEFT)
-                            this.ball.position[0] += penetration
-                        else
-                            this.ball.position[0] -= penetration
-                    } else {
-                        this.ball.direction[1] *= -1
-                        var penetration = this.ball.radius - Math.abs(diff_vector[1])
-                        if (direction == Direction.DOWN)
-                            this.ball.position[1] += penetration
-                        else
-                            this.ball.position[1] -= penetration
+                    var coll_vector = collision[1]
+                    var coll_face = vectorDirection(collision[1], 0)
+
+                    if (coll_face == Direction.LEFT || coll_face == Direction.RIGHT) {
+                        var t = this.ball.direction[0] *= -1
+                        this.ball.position[0] -= t*(this.ball.radius-Math.abs(coll_vector[0]))
                     }
-                    //this.ball.velocity -= 1
+                    else { 
+                        var t = this.ball.direction[1] *= -1
+                        this.ball.position[1] -= t*(this.ball.radius-Math.abs(coll_vector[1]))
+                    }              
                 }
             }
         })
 
-        var result = checkCollision(this.ball, this.paddle)
-        if (!stuck && result[0]) {
-            this.ball.direction[1] = 1
+        var collision = checkCollision(this.ball, this.paddle, oldPosition)
+        if (!stuck && collision[0]) {
+            var t = this.ball.direction[1] *= -1
+            var coll_vector = collision[1]
+            this.ball.position[1] -= t*(this.ball.radius-Math.abs(coll_vector[1]))
+
             var centerBoard = this.paddle.position[0] + this.paddle.size[0] / 2
-            var centerBall = this.ball.position[0] + this.ball.radius
-            var distance =  Math.abs(centerBall - centerBoard)
+            var centerBall = this.ball.position[0] + this.ball.size[0] / 2
+            var distance =  centerBall - centerBoard
             var percentage = distance / (this.paddle.size[0] / 2)
 
-            var radian = Math.PI / 2 * percentage
+            var radian = Math.PI / 3 * percentage
             var velocity = vec2.length(this.ball.velocity)
+
+            var move_vector = collision[2]
+            var move_face = vectorDirection(move_vector, 4)
+            
+            //var coll_vector = collision[1]
+            //var coll_face = vectorDirection(collision[1], 0)
+
+            if (distance <= 0) {
+                this.ball.direction[0] = -1
+
+                if (move_face == Direction.LEFT_DOWN) {
+                    
+                }
+                else {
+                    // *= -1 
+                }
+            }
+            else {
+                this.ball.direction[0] = -1
+                if (move_face == Direction.LEFT_DOWN) {
+                    //
+                }
+                else {
+                    //this.ball.direction[0] *= -1
+                }
+            }
+   
 
             this.ball.velocity[0] = velocity * Math.sin(radian)
             this.ball.velocity[1] = velocity * Math.cos(radian)
             //console.log(this.ball.velocity)
+
         }
-    }
-
-GameLevel.prototype.draw =
-    function () {
-        this.background.draw()
-        this.paddle.draw()
-        this.ball.draw()
-
-        this.bricks.forEach(obj => {
-            if (!obj.destroyed) {
-                obj.draw()
-            }
-        })
     }
 
 GameLevel.prototype.update =
@@ -342,14 +371,15 @@ GameLevel.prototype.update =
         }
 
         var ball = this.ball
+        var oldPosition = ball.position.slice()
         if (stuck) {
             ball.position[0] = paddle.position[0] + paddle.size[0] / 2 - ball.size[0] / 2
-        } 
+        }
         else {
             ball.position[0] -= ball.direction[0] * ball.velocity[0]
             ball.position[1] -= ball.direction[1] * ball.velocity[1]
 
-            if (ball.position[0] < 0 || ball.position[0] > level.levelWidth - 2 * ball.radius)
+            if (ball.position[0] <= 0 || ball.position[0] >= level.levelWidth - 2 * ball.radius)
                 ball.direction[0] *= -1
             if (ball.position[1] < 0) //|| ball.position[1] > level.levelHeight-paddle.size[1]-2*ball.radius) 
                 ball.direction[1] *= -1
@@ -360,7 +390,20 @@ GameLevel.prototype.update =
 
         }
 
-        this.doCollisions()
+        this.doCollisions(oldPosition)
+    }
+
+GameLevel.prototype.draw =
+    function () {
+        this.background.draw()
+        this.paddle.draw()
+        this.ball.draw()
+
+        this.bricks.forEach(obj => {
+            if (!obj.destroyed) {
+                obj.draw()
+            }
+        })
     }
 
 Game.prototype.init =
