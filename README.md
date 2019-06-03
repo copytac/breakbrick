@@ -7,7 +7,9 @@ Play: [url](https://keiboard.github.io/breakbrick/)
 
 ## Usage
 
-Use keyboard [space, left, right] to play 
+**Desktop:** use keyboard [space, left, right] to play
+
+**Mobile:**  touch screen [left, right] to control
 
 ## Thanks:
 Anonymous: [LearnOpenGL-CN](https://github.com/LearnOpenGL-CN/LearnOpenGL-CN)
