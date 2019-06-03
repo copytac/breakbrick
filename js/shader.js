@@ -1,6 +1,6 @@
 // shader.js webgl shader create by webgl
 
-const vsSource = `#version 300 es
+var vsSource = `#version 300 es
 precision highp float;  
 precision mediump int;  
 
@@ -14,12 +14,12 @@ uniform mat4 projection;
 void main()
 {
     TexCoords = vertex.zw;
-		gl_Position = projection * model * vec4(vertex.xy, 0.0, 1.0);
-		//gl_Position = vec4(vertex.xy, 0.0, 1.0);
+	gl_Position = projection * model * vec4(vertex.xy, 0.0, 1.0);
+	//gl_Position = vec4(vertex.xy, 0.0, 1.0);
 }
 `
 
-const fsSource = `#version 300 es
+var fsSource = `#version 300 es
 
 precision highp float;  
 precision mediump int;  
@@ -133,6 +133,73 @@ document.body.style.padding = 0
 canvas.width = document.documentElement.clientWidth
 canvas.height = document.documentElement.clientHeight
 
-var gl = canvas.getContext("webgl2");
+var gl = canvas.getContext("webgl3");
+
+var IsWebGL2 = true
+if (gl == null) {
+	gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl")
+	IsWebGL2 = false
+}
+var ext
+if(!IsWebGL2) {
+	ext = gl.getExtension("OES_vertex_array_object")
+}
+
+function bindVertexArray(VAO) {
+	if(IsWebGL2)
+		return gl.bindVertexArray(VAO)
+	else
+		return ext.bindVertexArrayOES(VAO)
+}
+
+function createVertexArray(VAO) {
+	if(IsWebGL2)
+		return gl.createVertexArray()
+	else
+		return ext.createVertexArrayOES()
+}
+
+
+if(!IsWebGL2) {
+	vsSource = `#version 100
+	precision highp float;  
+	precision mediump int;  
+
+	attribute vec4 vertex; // <vec2 position, vec2 texCoords>
+	attribute vec2 TexCoords;
+
+	varying vec2 vTexCoords;
+
+	uniform mat4 model;
+	uniform mat4 projection;
+
+	void main()
+	{
+		vTexCoords = vertex.zw;
+		gl_Position = projection * model * vec4(vertex.xy, 0.0, 1.0);
+		//gl_Position = vec4(vertex.xy, 0.0, 1.0);
+		
+	}
+	`
+
+	fsSource = `#version 100
+
+	precision highp float;  
+	precision mediump int;  
+
+	varying vec2 vTexCoords;
+
+	uniform sampler2D image;
+	uniform vec3 objColor;
+
+	void main()
+	{
+		gl_FragColor =  texture2D(image, vTexCoords) * vec4(objColor, 1.0);
+	}
+	`
+}
+
+
+
 
 //init()

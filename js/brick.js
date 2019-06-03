@@ -9,7 +9,8 @@ var textureResources = {
 }
 
 function GetPositionVAO() {
-    var VAO = gl.createVertexArray();
+    
+    var VAO = createVertexArray()
     var VBO = gl.createBuffer();
     const vertices = [
         // 位置     // 纹理
@@ -24,11 +25,13 @@ function GetPositionVAO() {
     gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
 
-    gl.bindVertexArray(VAO);
+    bindVertexArray(VAO)
+    
     const layout = 0
     gl.enableVertexAttribArray(layout);
     gl.vertexAttribPointer(layout, 4, gl.FLOAT, false, 0, 0);
-    gl.bindVertexArray(null);
+    
+    bindVertexArray(null)
 
     return VAO
 }
@@ -199,11 +202,13 @@ GameObject.prototype.draw =
 
         //gl.uniform1i(gl.getUniformLocation(Program, "image"), 0);
 
-        gl.bindVertexArray(this.VAO);
+
+        bindVertexArray(this.VAO)
         //gl.activeTexture(gl.TEXTURE0); //设置使用的纹理编号-
         gl.bindTexture(gl.TEXTURE_2D, this.textureBuffer);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
-        gl.bindVertexArray(null);
+
+        bindVertexArray(null)
     }
 
 GameLevel.prototype.init =
@@ -410,20 +415,54 @@ Game.prototype.processInput =
         direction = 0
         stuck = true
 
-        document.onkeydown = function (event) {
+        document.addEventListener('keydown', (event)=>{
             var e = event || window.event || arguments.callee.caller.arguments[0]
-            if (e && e.keyCode == 37) {
+            if (e && e.key == "ArrowLeft")
                 direction = -1
-            } else if (e && e.keyCode == 39) {
+            else if (e && e.key == "ArrowRight") 
                 direction = 1
-            } else if (e && e.keyCode == 32) {
+            else if (e && e.key == " ")
                 stuck = false
-            }
-        }
-        document.onkeyup = function (event) {
+        })
+        document.addEventListener("keyup", (event) =>{
             direction = 0
-        }
+        })
+        var touch
+        document.addEventListener('touchstart', (event)=>{
+            event.preventDefault()
+            if (event.touches[1] == null)
+                touch = event.touches[0]
+            else
+                touch = event.touches[1]
+            var key
+            if (touch.pageX  < canvas.width/2)
+                key = "ArrowLeft"
+            else
+                key = "ArrowRight"
+            var e = new KeyboardEvent("keydown", {key: key})
+            document.dispatchEvent(e)
+        })
+        document.addEventListener("touchmove", (event) =>{
+            event.preventDefault()
+            
+            var key
+            if (touch.pageX  < canvas.width/2)
+                key = "ArrowLeft"
+            else
+                key = "ArrowRight"
+            var e = new KeyboardEvent("keydown", {key: key})
+            document.dispatchEvent(e)
+        })
 
+        document.addEventListener("touchend", (event) =>{
+            if (event.touches[0] != null) {
+                touch = event.touches[0]
+                return
+            }
+            
+            stuck = false
+            direction = 0
+        })
 
     }
 
