@@ -1,8 +1,9 @@
-// shader.js webgl shader create by webgl
+// shader.js webgl shader create by MDN
 
 var vsSource = `#version 300 es
+
 precision highp float;  
-precision mediump int;  
+precision mediump int; 
 
 layout (location = 0) in vec4 vertex; // <vec2 position, vec2 texCoords>
 
@@ -11,12 +12,34 @@ out vec2 TexCoords;
 uniform mat4 model;
 uniform mat4 projection;
 
-void main()
-{
-    TexCoords = vertex.zw;
-	gl_Position = projection * model * vec4(vertex.xy, 0.0, 1.0);
-	//gl_Position = vec4(vertex.xy, 0.0, 1.0);
-}
+uniform bool  chaos;
+uniform bool  confuse;
+uniform bool  shake;
+uniform float time;
+
+void main() {
+
+    gl_Position = projection * model * vec4(vertex.xy, 0.0f, 1.0f); 
+	vec2 texture = vertex.zw;
+	
+	float strength;
+    if(chaos) {
+	    strength = 0.3;
+        vec2 pos = vec2(texture.x + sin(time) * strength, texture.y + cos(time) * strength);        
+        TexCoords = pos;
+    }
+    else if(confuse) {
+        TexCoords = vec2(1.0 - texture.x, 1.0 - texture.y);
+    }
+    else {
+        TexCoords = texture;
+    }
+    if (shake) {
+		strength = 0.01;
+        gl_Position.x += cos(time * 10.0) * strength;
+        gl_Position.y += cos(time * 15.0) * strength;
+    }
+}  
 `
 
 var fsSource = `#version 300 es
@@ -24,15 +47,44 @@ var fsSource = `#version 300 es
 precision highp float;  
 precision mediump int;  
 
-in vec2 TexCoords;
-out vec4 color;
+in  vec2  TexCoords;
+out vec4  color;
 
-uniform sampler2D image;
-uniform vec3 objColor;
+uniform sampler2D	scene;
+uniform vec3	objColor;
+uniform vec2 	offsets[9];
+uniform float	edge_kernel[9];
+uniform float	blur_kernel[9];
 
-void main()
-{
-    color =  texture(image, TexCoords) * vec4(objColor, 1.0);
+uniform bool chaos;
+uniform bool confuse;
+uniform bool shake;
+
+void main(){
+
+    color = vec4(0.0f);
+    vec3 sampler[9];
+
+    if(chaos || shake)
+        for(int i = 0; i < 9; i++)
+            sampler[i] = vec3(texture(scene, TexCoords.st + offsets[i]));
+
+    if(chaos) {           
+        for(int i = 0; i < 9; i++)
+            color += vec4(sampler[i] * edge_kernel[i], 0.0f);
+        color.a = 1.0f;
+	}
+	else if(confuse) {
+        color = vec4(1.0 - texture(scene, TexCoords).rgb, 1.0);
+    }
+    /*else if(shake) {
+        for(int i = 0; i < 9; i++)
+            color += vec4(sampler[i] * blur_kernel[i], 0.0f);
+        color.a = 1.0f;
+    }*/
+    else {
+        color =  texture(scene, TexCoords) * vec4(objColor, 1.0);
+    }
 }
 `
 function initShaderProgram(gl, vsSource, fsSource) {
@@ -133,7 +185,7 @@ document.body.style.padding = 0
 canvas.width = document.documentElement.clientWidth
 canvas.height = document.documentElement.clientHeight
 
-var gl = canvas.getContext("webgl3");
+var gl = canvas.getContext("webgl2");
 
 var IsWebGL2 = true
 if (gl == null) {
@@ -159,6 +211,12 @@ function createVertexArray(VAO) {
 		return ext.createVertexArrayOES()
 }
 
+function deleteVertexArray(VAO) {
+	if(IsWebGL2)
+	return gl.deleteVertexArray(VAO)
+else
+	return ext.deleteVertexArrayOES(VAO)
+}
 
 if(!IsWebGL2) {
 	vsSource = `#version 100
@@ -172,13 +230,41 @@ if(!IsWebGL2) {
 
 	uniform mat4 model;
 	uniform mat4 projection;
+	
+	uniform sampler2D	scene;
+	uniform vec3	objColor;
+
+	uniform vec2 	offsets[9];
+	uniform float	edge_kernel[9];
+	uniform float	blur_kernel[9];
+	
+	uniform bool chaos;
+	uniform bool confuse;
+	uniform bool shake;
+	uniform float time;
 
 	void main()
 	{
-		vTexCoords = vertex.zw;
 		gl_Position = projection * model * vec4(vertex.xy, 0.0, 1.0);
-		//gl_Position = vec4(vertex.xy, 0.0, 1.0);
-		
+		vec2 texture = vertex.zw;
+		float strength;
+		if(chaos) {
+			strength = 0.3;
+			vec2 pos = vec2(texture.x + sin(time) * strength, texture.y + cos(time) * strength);        
+			vTexCoords = pos;
+		}
+		else if(confuse) {
+			vTexCoords = vec2(1.0 - texture.x, 1.0 - texture.y);
+		}
+		else {
+			vTexCoords = texture;
+		}
+		if (shake) {
+			strength = 0.01;
+			gl_Position.x += cos(time * 10.0) * strength;
+			gl_Position.y += cos(time * 15.0) * strength;
+		}
+				
 	}
 	`
 
@@ -189,17 +275,42 @@ if(!IsWebGL2) {
 
 	varying vec2 vTexCoords;
 
-	uniform sampler2D image;
+	uniform sampler2D scene;
 	uniform vec3 objColor;
+	
+	uniform vec2 	offsets[9];
+	uniform float	edge_kernel[9];
+	uniform float	blur_kernel[9];
 
-	void main()
-	{
-		gl_FragColor =  texture2D(image, vTexCoords) * vec4(objColor, 1.0);
+	uniform bool chaos;
+	uniform bool confuse;
+	uniform bool shake;
+
+	void main(){
+
+		gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+		vec3 sampler[9];
+
+		if(chaos || shake)
+			for(int i = 0; i < 9; i++)
+				sampler[i] = vec3(texture2D(scene, vTexCoords.st + offsets[i]));
+
+		if(chaos) {           
+			for(int i = 0; i < 9; i++)
+				gl_FragColor += vec4(sampler[i] * edge_kernel[i], 0.0);
+			gl_FragColor.a = 1.0;
+		}
+		else if(confuse) {
+			gl_FragColor = vec4(1.0 - texture2D(scene, vTexCoords).rgb, 1.0);
+		}
+		/*else if(shake) {
+			for(int i = 0; i < 9; i++)
+				gl_FragColor += vec4(sampler[i] * blur_kernel[i], 0.0);
+			gl_FragColor.a = 1.0;
+		}*/
+		else {
+			gl_FragColor =  texture2D(scene, vTexCoords) * vec4(objColor, 1.0);
+		}
 	}
 	`
 }
-
-
-
-
-//init()

@@ -1,4 +1,5 @@
-//const texturesDir = "./textures"
+// brick.js create by keiboard learn from learnopengl.
+// const texturesDir = "./textures"
 
 var textureResources = {
     background: loadTexture(gl.TEXTURE0, "./textures/background.jpg"),
@@ -8,10 +9,10 @@ var textureResources = {
     paddle: loadTexture(gl.TEXTURE0, "./textures/paddle.png"),
 }
 
-function GetPositionVAO() {
+function GetResources() {
     
     var VAO = createVertexArray()
-    var VBO = gl.createBuffer();
+    var VBO = gl.createBuffer()
     const vertices = [
         // 位置     // 纹理
         0.0, 1.0, 0.0, 1.0,
@@ -33,10 +34,33 @@ function GetPositionVAO() {
     
     bindVertexArray(null)
 
-    return VAO
+    var FBO = gl.createFramebuffer()
+    
+
+    var TBO = gl.createTexture()
+    gl.bindTexture(gl.TEXTURE_2D, TBO)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+
+    var RBO = gl.createRenderbuffer()
+    gl.bindRenderbuffer(gl.RENDERBUFFER, RBO)
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_STENCIL, canvas.width, canvas.height)
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, FBO)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, TBO, 0)
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, RBO)
+    
+    /*if(gl.checkFramebufferStatus(gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE)
+        console.log("FBO complete.")*/
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+    return [VAO, VBO, FBO, TBO, RBO]
 }
 
-var VAO = GetPositionVAO()
+var [VAO, VBO, FBO, TBO, RBO] = GetResources()
+
 
 const brickLevel1 =
     `5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 	 
@@ -200,25 +224,43 @@ GameObject.prototype.draw =
         gl.uniformMatrix4fv(gl.getUniformLocation(Program, "model"), false, model);
         gl.uniform3fv(gl.getUniformLocation(Program, "objColor"), color);
 
-        //gl.uniform1i(gl.getUniformLocation(Program, "image"), 0);
-
-
         bindVertexArray(this.VAO)
         //gl.activeTexture(gl.TEXTURE0); //设置使用的纹理编号-
         gl.bindTexture(gl.TEXTURE_2D, this.textureBuffer);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 
+        gl.bindTexture(gl.TEXTURE_2D, null);
         bindVertexArray(null)
     }
 
 GameLevel.prototype.init =
     function () {
-
+        gl.uniform1i(gl.getUniformLocation(Program, "scene"), 0);
+        
         var projection = mat4.create()
         mat4.ortho(projection, 0.0, this.levelWidth, this.levelHeight, 0.0, -1.0, 1.0);
-
-        gl.uniform1i(gl.getUniformLocation(Program, "image"), 0);
         gl.uniformMatrix4fv(gl.getUniformLocation(Program, "projection"), false, projection);
+
+        var offset = 1.0 / 300.0
+        var offsets = [
+            [-offset, 0.0, offset, -offset, 0.0, offset, -offset, 0.0, offset],    // bottom-right    
+            [offset, offset, offset, 0.0, 0.0, 0.0, -offset, -offset, -offset]
+        ];
+        gl.uniform2fv(gl.getUniformLocation(Program, "offsets"), offsets);
+
+        var edge_kernel = [
+            -1, -1, -1,
+            -1,  8, -1,
+            -1, -1, -1
+        ];
+        gl.uniform1fv(gl.getUniformLocation(Program, "edge_kernel"), edge_kernel);
+
+        var blur_kernel = [
+            1.0 / 16, 2.0 / 16, 1.0 / 16,
+            2.0 / 16, 4.0 / 16, 2.0 / 16,
+            1.0 / 16, 2.0 / 16, 1.0 / 16
+        ];
+        gl.uniform1fv(gl.getUniformLocation(Program, "blur_kernel"), blur_kernel);
 
         this.background = new GameObject(textureResources.background,
             vec2.fromValues(0, 0), vec3.fromValues(this.levelWidth, this.levelHeight), vec3.fromValues(1, 1, 1))
@@ -299,6 +341,12 @@ GameLevel.prototype.doCollisions =
                     if (!brick.isSolid) {
                         brick.destroyed = true
                     }
+                    else {
+                        this.time = 3*deltaTime
+                        gl.uniform1f(gl.getUniformLocation(Program, "time"), this.time)
+                        //gl.uniform1i(gl.getUniformLocation(Program, "chaos"), 1)
+                        gl.uniform1i(gl.getUniformLocation(Program, "shake"), 1)
+                    }
                     var coll_vector = collision[1]
                     var coll_face = vectorDirection(collision[1], 0)
 
@@ -334,7 +382,7 @@ GameLevel.prototype.doCollisions =
             //var coll_vector = collision[1]
             //var coll_face = vectorDirection(collision[1], 0)
 
-            this.ball.direction[0] = -1  
+            this.ball.direction[0] = -1
 
             this.ball.velocity[0] = velocity * Math.sin(radian)
             this.ball.velocity[1] = velocity * Math.cos(radian)
@@ -377,6 +425,12 @@ GameLevel.prototype.update =
         }
 
         this.doCollisions(oldPosition)
+
+        if(this.time > 0.0){
+            this.time -= deltaTime
+            if(this.time <= 0.0)
+                gl.uniform1i(gl.getUniformLocation(Program, "shake"), 0);
+        }
     }
 
 GameLevel.prototype.draw =
@@ -506,6 +560,18 @@ function main() {
     requestAnimationFrame(render);
 }
 
-
+window.onbeforeunload = ()=>{
+    //gl.useProgram(null)
+    //gl.deleteProgram(Program)
+    for (name in textureResources) {
+        gl.deleteTexture(textureResources[name])
+    }
+    gl.deleteBuffer(VBO)
+    deleteVertexArray(VAO)
+    gl.deleteRenderbuffer(RBO)
+    gl.deleteTexture(TBO)
+    gl.deleteFramebuffer(FBO)
+    gl.getExtension('WEBGL_lose_context').loseContext()
+}
 
 main()
