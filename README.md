@@ -3,7 +3,7 @@ A classic game. there are some bugs to be fixed and some new element will be add
 
 ## Try to play
 
-Play: [url](https://keiboard.github.io/breakbrick/)
+Play: [url](https://copytac.github.io/breakbrick/)
 
 ## Usage
 
